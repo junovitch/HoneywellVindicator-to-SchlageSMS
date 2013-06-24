@@ -66,6 +66,8 @@
 #	updated to display last, first for each changed record.
 # V1.42 JU - 20130528 - Remove Middle Initial field and publish to a permanent
 #	repository.
+# V1.43 JU - 20130624 - Revised XLS to Array conversion to use a subroutine over
+#	repetitive code. Removed 46 total lines with no functional changes.
 #
 ################################################################################
 ##  Perl Module Declaration  ###################################################
@@ -86,7 +88,7 @@ use Data::Dumper;
 ################################################################################
 
 # Define script version number
-our $VERSION = "1.42";
+our $VERSION = "1.43";
 (my $progname = $0) =~ s,.*[\\/],,;
 
 # Setup Date-stamps
@@ -115,6 +117,18 @@ my @cleanup_list;
 my $log;
 my $input_filename;
 my $has_gui = "NO";
+my @Last_Names;
+my @First_Names;
+my @Issue_Dates;
+my @Expire_Dates;
+my @V5_Personnel_Groups;
+my @V5_Authority_Levels;
+my @V5_Privileges;
+my @V5_Card_Actives;
+my @V5_Normal_PINs;
+my @V5_Card_Numbers;
+my @SMS_Card_Numbers;
+my @tmpArray;
 
 # Instructions to be displayed when help is requested.
 my $instructions = <<"__END__";
@@ -374,168 +388,20 @@ sub print {
 	}
 }
 
-sub main {
-	# Check to see that only an XLS file is opened.
-	unless ($input_filename =~ /\.xls$/i) {
-		&print("Needs to be an Excel .xls file!");
-		&wrong_file && return if ($has_gui =~ /YES/); 
-		exit if ($has_gui =~ /NO/);
-	}
+# XLS to array functions that parse through each string reference retrieved and
+# convert them in a usable form.
+sub xlsConvertToArray ($) {
+	my $xls = shift;
 
-	# Display up front if there are left over changes from a prior run that
-	# didn't save and exit properly.
-	foreach my $file (@target_directory_files) {
-		if ($file =~ /manual-updates.txt/) {
-			&print("WARNING: There appears to be unmerged updates from a previous run in $file.");
-			open(FILE1, "<", "$target_directory\\$file") || die $?;
-			while(<FILE1>) {
-				chomp $_; &print("$_");
-			}
-			close(FILE1);
+	foreach my $refArray (@$xls) {
+		foreach (@$refArray) {
+			if (defined ($_)) { push(@tmpArray, $_); } else { push(@tmpArray, ''); }
 		}
 	}
+}
+sub xlsProcessAndConvertToArray ($) {
+	my $xls = shift;
 
-	# Access Excel via the OLE interface and open $input_filename
-	$Win32::OLE::Warn = 3;
-	my $Excel = Win32::OLE->new('Excel.Application');
-	my $workbook = $Excel->Workbooks->Open($input_filename);
-	my $Sheet = $workbook->Worksheets(1);
-	$Sheet->Activate();
-
-	# Check the number of columns so that program logic knows stopping points
-	my $lastColumn = $Sheet->UsedRange->Find({What => "*", 
-		SearchDirection	=> xlPrevious,
-		SearchOrder	=> xlByColumns})->{Column};
-	&print("==>> Total Columns to process is $lastColumn...");
-
-	# Check the number or rows so that program logic knows stopping points
-	my $lastRow = $Sheet->UsedRange->Find({What => "*",
-		SearchDirection	=> xlPrevious,
-		SearchOrder	=> xlByRows})->{Row};
-	&print("==>> Total Rows to process is $lastRow...");
-
-	# Define variables to cover each column needed.
-	my ($Last_Name,
-		$First_Name,
-		$Issue_Date,
-		$Expire_Date,
-		$V5_Personnel_Group,
-		$V5_Authority_Level,
-		$V5_Privilege,		
-		$V5_Card_Active,
-		$V5_Normal_PIN,
-		$V5_Card_Number,
-	);
-
-	# Parse each column and load it into the appropriate variable based off the header
-	foreach my $column (1..$lastColumn) {
-		my $header = $Sheet->Cells(1,$column)->{'Value'};
-		given ($header) {
-			when (/^Last Name$/i) {
-				$Last_Name = $Sheet->Columns($column)->{'Value'};
-			}
-			when (/^First Name$/i) {
-				$First_Name = $Sheet->Columns($column)->{'Value'};
-			}
-			when (/^Issue Date$/i) {
-				$Issue_Date = $Sheet->Columns($column)->{'Value'};
-			}
-			when (/^Expire Date$/i) {
-				$Expire_Date = $Sheet->Columns($column)->{'Value'};
-			}
-			when (/^V5 Personnel Group$/i) {
-				$V5_Personnel_Group = $Sheet->Columns($column)->{'Value'};
-			}
-			when (/^V5 Authority Level$/i) {
-				$V5_Authority_Level = $Sheet->Columns($column)->{'Value'};
-			}
-			when (/^V5 Privilege$/i) {
-				$V5_Privilege = $Sheet->Columns($column)->{'Value'};
-			}
-			when (/^V5 Card Active$/i) {
-				$V5_Card_Active = $Sheet->Columns($column)->{'Value'};
-			}
-			when (/^V5 Normal PIN$/i) {
-				$V5_Normal_PIN = $Sheet->Columns($column)->{'Value'};
-			}			
-			when (/^V5 Card Number$/i) {
-				$V5_Card_Number = $Sheet->Columns($column)->{'Value'};
-			}
-		}
-	}
-	
-	# Create some Perl arrays to hold the actual data for program use.
-	my (@Last_Names,
-		@First_Names,
-		@Issue_Dates,
-		@Expire_Dates,
-		@V5_Personnel_Groups,
-		@V5_Authority_Levels,
-		@V5_Privileges,
-		@V5_Card_Actives,
-		@V5_Normal_PINs,
-		@V5_Card_Numbers,
-		@SMS_Card_Numbers,
-	);
-
-	# Parse through each $string reference to load data into a Perl usable form
-	# in an array that is named very similarly.  Realize that the $First_Name ...
-	# titled variables are competely separate from the @First_Names variables and
-	# they are only named similarly for us to follow data flow through the program.
-	foreach my $lastNameRefArray (@$Last_Name) {
-		foreach (@$lastNameRefArray) {
-			if (defined ($_)) { push(@Last_Names, $_); } else { push(@Last_Names, ''); }
-		}
-	}
-
-	foreach my $firstNameRefArray (@$First_Name) {
-		foreach (@$firstNameRefArray) {
-			if (defined ($_)) { push(@First_Names, $_); } else { push(@First_Names, ''); }
-		}
-	}
-
-	foreach my $issueDatesRefArray (@$Issue_Date) {
-		foreach (@$issueDatesRefArray) {
-			if (defined ($_)) { push(@Issue_Dates, $_); } else { push(@Issue_Dates, ''); }
-		}
-	}
-
-	foreach my $expireDatesRefArray (@$Expire_Date) {
-		foreach (@$expireDatesRefArray) {
-			if (defined ($_)) { push(@Expire_Dates, $_); } else { push(@Expire_Dates, ''); }
-		}
-	}	
-	
-	foreach my $V5PersonnelGroupRefArray (@$V5_Personnel_Group) {
-		foreach (@$V5PersonnelGroupRefArray) {
-			if (defined ($_)) { push(@V5_Personnel_Groups, $_); } else { push(@V5_Personnel_Groups, ''); }
-		}
-	}
-
-	foreach my $V5AuthorityLevelRefArray (@$V5_Authority_Level) {
-		foreach (@$V5AuthorityLevelRefArray) {
-			if (defined ($_)) { push(@V5_Authority_Levels, $_); } else { push(@V5_Authority_Levels, ''); }
-		}
-	}
-
-	foreach my $V5PrivilegesRefArray (@$V5_Privilege) {
-		foreach (@$V5PrivilegesRefArray) {
-			if (defined ($_)) { push(@V5_Privileges, $_); } else { push(@V5_Privileges, ''); }
-		}
-	}
-
-	foreach my $V5CardActiveRefArray (@$V5_Card_Active) {
-		foreach (@$V5CardActiveRefArray) {
-			if (defined ($_)) { push(@V5_Card_Actives, $_); } else { push(@V5_Card_Actives, ''); }
-		}
-	}	
-	
-	foreach my $V5NormalPINsRefArray (@$V5_Normal_PIN) {
-		foreach (@$V5NormalPINsRefArray) {
-			if (defined ($_)) { push(@V5_Normal_PINs, $_); } else { push(@V5_Normal_PINs, ''); }
-		}
-	}
-	
 	# Set some unique variables used in the calculation of SMS style badge numbers
 	my ($SMS_badge_code,
 		$binary_V5_badge_code,
@@ -567,7 +433,7 @@ sub main {
 	#
 	# At this point, we have 24 information bits of a 26 bit format. The bits before
 	# and after are for calculating parity.
-	foreach my $decimalBadgeNumberRefArray (@$V5_Card_Number) {
+	foreach my $decimalBadgeNumberRefArray (@$xls) {
 		foreach my $badgeNumber (@$decimalBadgeNumberRefArray) {
 			if (defined($badgeNumber) && ($badgeNumber =~ /^\d+$/ && $badgeNumber > 0 && $badgeNumber < 65535)) {
 				# It's defined,       it's a number,             it's greater than 0 and less than 65535
@@ -631,6 +497,93 @@ sub main {
 				# Prints 0s for anything not valid
 				push(@SMS_Card_Numbers, "0");
 				push(@V5_Card_Numbers, "0");
+			}
+		}
+	}
+}		
+
+sub main {
+	# Check to see that only an XLS file is opened.
+	unless ($input_filename =~ /\.xls$/i) {
+		&print("Needs to be an Excel .xls file!");
+		&wrong_file && return if ($has_gui =~ /YES/); 
+		exit if ($has_gui =~ /NO/);
+	}
+
+	# Display up front if there are left over changes from a prior run that
+	# didn't save and exit properly.
+	foreach my $file (@target_directory_files) {
+		if ($file =~ /manual-updates.txt/) {
+			&print("WARNING: There appears to be unmerged updates from a previous run in $file.");
+			open(FILE1, "<", "$target_directory\\$file") || die $?;
+			while(<FILE1>) {
+				chomp $_; &print("$_");
+			}
+			close(FILE1);
+		}
+	}
+
+	# Access Excel via the OLE interface and open $input_filename
+	$Win32::OLE::Warn = 3;
+	my $Excel = Win32::OLE->new('Excel.Application');
+	my $workbook = $Excel->Workbooks->Open($input_filename);
+	my $Sheet = $workbook->Worksheets(1);
+	$Sheet->Activate();
+
+	# Check the number of columns so that program logic knows stopping points
+	my $lastColumn = $Sheet->UsedRange->Find({What => "*", 
+		SearchDirection	=> xlPrevious,
+		SearchOrder	=> xlByColumns})->{Column};
+	&print("==>> Total Columns to process is $lastColumn...");
+
+	# Check the number or rows so that program logic knows stopping points
+	my $lastRow = $Sheet->UsedRange->Find({What => "*",
+		SearchDirection	=> xlPrevious,
+		SearchOrder	=> xlByRows})->{Row};
+	&print("==>> Total Rows to process is $lastRow...");
+
+	# Parse each column and load it into the appropriate variable based off the header
+	foreach my $column (1..$lastColumn) {
+		my $header = $Sheet->Cells(1,$column)->{'Value'};
+		given ($header) {
+			when (/^Last Name$/i) {
+				&xlsConvertToArray($Sheet->Columns($column)->{'Value'});
+				@Last_Names = @tmpArray; undef @tmpArray;
+			}
+			when (/^First Name$/i) {
+				&xlsConvertToArray($Sheet->Columns($column)->{'Value'});
+				@First_Names = @tmpArray; undef @tmpArray;
+			}
+			when (/^Issue Date$/i) {
+				&xlsConvertToArray($Sheet->Columns($column)->{'Value'});
+				@Issue_Dates = @tmpArray; undef @tmpArray;
+			}
+			when (/^Expire Date$/i) {
+				&xlsConvertToArray($Sheet->Columns($column)->{'Value'});
+				@Expire_Dates = @tmpArray; undef @tmpArray;
+			}
+			when (/^V5 Personnel Group$/i) {
+				&xlsConvertToArray($Sheet->Columns($column)->{'Value'});
+				@V5_Personnel_Groups = @tmpArray; undef @tmpArray;
+			}
+			when (/^V5 Authority Level$/i) {
+				&xlsConvertToArray($Sheet->Columns($column)->{'Value'});
+				@V5_Authority_Levels = @tmpArray; undef @tmpArray;
+			}
+			when (/^V5 Privilege$/i) {
+				&xlsConvertToArray($Sheet->Columns($column)->{'Value'});
+				@V5_Privileges = @tmpArray; undef @tmpArray;
+			}
+			when (/^V5 Card Active$/i) {
+				&xlsConvertToArray($Sheet->Columns($column)->{'Value'});
+				@V5_Card_Actives = @tmpArray; undef @tmpArray;
+			}
+			when (/^V5 Normal PIN$/i) {
+				&xlsConvertToArray($Sheet->Columns($column)->{'Value'});
+				@V5_Normal_PINs = @tmpArray; undef @tmpArray;
+			}
+			when (/^V5 Card Number$/i) {
+				&xlsProcessAndConvertToArray($Sheet->Columns($column)->{'Value'});
 			}
 		}
 	}
@@ -804,34 +757,34 @@ sub main {
 		&print("");
 		&print("ALL DONE!  Please save and exit.");
 	}
+}
 
-	sub cleanup {
-		# First we'll rename the replacement file as the new baseline
-		&print("==>> Renaming $output_full_import_file to $baseline_import_file...");
-		rename($output_full_import_file, $baseline_import_file)
-			&& &print("DONE")
-			|| &print("unable to rename");
-		&print("==>> Renaming $output_raw_datafile to $baseline_raw_datafile...");
-		rename($output_raw_datafile, $baseline_raw_datafile)
-			&& &print("DONE")
-			|| &print("unable to rename");
+sub cleanup {
+	# First we'll rename the replacement file as the new baseline
+	&print("==>> Renaming $output_full_import_file to $baseline_import_file...");
+	rename($output_full_import_file, $baseline_import_file)
+		&& &print("DONE")
+		|| &print("unable to rename");
+	&print("==>> Renaming $output_raw_datafile to $baseline_raw_datafile...");
+	rename($output_raw_datafile, $baseline_raw_datafile)
+		&& &print("DONE")
+		|| &print("unable to rename");
 
-		# Make a list of files to cleanup
-		# Only applied for files already in the directory from before.
-		foreach my $file (@target_directory_files) {
-			if ($file =~ /\d{14}-SMS-(fullimport|rawdata|import-this-file|manual-updates)\.txt/) {
-				push(@cleanup_list, "$target_directory\\$file");
-			}
-       		}
-
-		# Then we'll remove each file listed on the cleanup list.
-		&print("==>> Removing temporary files...");
-		foreach(@cleanup_list) {
-			unlink("$_")
-				&& &print("Removed $_")
-				|| &print("unable to remove $_");
+	# Make a list of files to cleanup
+	# Only applied for files already in the directory from before.
+	foreach my $file (@target_directory_files) {
+		if ($file =~ /\d{14}-SMS-(fullimport|rawdata|import-this-file|manual-updates)\.txt/) {
+			push(@cleanup_list, "$target_directory\\$file");
 		}
-		&print("DONE");
-		exit 0;
+ 	}
+
+	# Then we'll remove each file listed on the cleanup list.
+	&print("==>> Removing temporary files...");
+	foreach(@cleanup_list) {
+		unlink("$_")
+			&& &print("Removed $_")
+			|| &print("unable to remove $_");
 	}
+	&print("DONE");
+	exit 0;
 }
