@@ -68,6 +68,14 @@
 #	repository.
 # V1.43 JU - 20130624 - Revised XLS to Array conversion to use a subroutine over
 #	repetitive code. Removed 46 total lines with no functional changes.
+# V1.44 JU - 20130812 - Change a variable name and remove unlink in exchange for
+# 	Win32::FileOp::Recycle. Now require Win32::FileOp PPM to be installed.
+#	http://ppm4.activestate.com/MSWin32-x86/5.16/1601/J/JE/JENDA/Win32-FileOp-0.16.02.tar.gz
+#	http://ppm4.activestate.com/MSWin32-x86/5.16/1601/J/JE/JENDA/Win32-FileOp-0.16.02.ppd
+#	http://ppm4.activestate.com/MSWin32-x86/5.16/1601/J/JE/JENDA/Win32-AbsPath-1.0.tar.gz
+#	http://ppm4.activestate.com/MSWin32-x86/5.16/1601/J/JE/JENDA/Win32-AbsPath-1.0.ppd
+#	http://ppm4.activestate.com/MSWin32-x86/5.16/1601/S/SA/SAMV/Data-Lazy-0.6.tar.gz
+#	http://ppm4.activestate.com/MSWin32-x86/5.16/1601/S/SA/SAMV/Data-Lazy-0.6.ppd
 #
 ################################################################################
 ##  Perl Module Declaration  ###################################################
@@ -77,6 +85,7 @@ use v5.14;
 use warnings;
 use strict;
 use Tkx;
+use Win32::FileOp;
 use Win32::OLE;
 use Win32::OLE::Const 'Microsoft Excel';
 use Win32::OLE::Variant;
@@ -88,7 +97,7 @@ use Data::Dumper;
 ################################################################################
 
 # Define script version number
-our $VERSION = "1.43";
+our $VERSION = "1.44";
 (my $progname = $0) =~ s,.*[\\/],,;
 
 # Setup Date-stamps
@@ -106,7 +115,7 @@ closedir DIR;
 # Set the default names of files used
 my $baseline_import_file = "$target_directory\\BASELINE-SMS-import.txt";
 my $baseline_raw_datafile = "$target_directory\\BASELINE-SMS-rawdata.txt";
-my $output_full_import_file = "$target_directory\\${datestamp}-SMS-fullimport.txt";
+my $output_full_import_file = "$target_directory\\${datestamp}-SMS-full.txt";
 my $output_raw_datafile = "$target_directory\\${datestamp}-SMS-rawdata.txt";
 my $output_differential_import_file = "$target_directory\\${datestamp}-SMS-import-this-file.txt";
 my $manual_update_filename = "$target_directory\\${datestamp}-SMS-manual-updates.txt";
@@ -781,7 +790,7 @@ sub cleanup {
 	# Then we'll remove each file listed on the cleanup list.
 	&print("==>> Removing temporary files...");
 	foreach(@cleanup_list) {
-		unlink("$_")
+		Win32::FileOp::Recycle("$_")
 			&& &print("Removed $_")
 			|| &print("unable to remove $_");
 	}
